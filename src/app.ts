@@ -52,27 +52,36 @@ app.get('/health', (_req, res) => {
 });
 
 // ── Inicialización ────────────────────────────────────────────
-// sequelize.sync({ alter: true }) compara los modelos con las tablas
-// existentes en MySQL y aplica los cambios necesarios sin borrar datos.
-// Una vez sincronizado, ejecuta el seed y luego inicia el servidor.
-sequelize
-  .sync({ alter: true })
-  .then(async () => {
-    console.log('Base de datos conectada y sincronizada');
+// Reintenta la conexión a la BD antes de rendirse.
+// Útil cuando el contenedor de MySQL tarda en estar listo.
+async function startServer(retries = 10, delayMs = 3000): Promise<void> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      // sync({ alter: true }) compara los modelos con las tablas existentes
+      // y aplica los cambios necesarios sin borrar datos.
+      await sequelize.sync({ alter: true });
+      console.log('Base de datos conectada y sincronizada');
 
-    // El seed crea roles, permisos y el superusuario si no existen.
-    // Es seguro ejecutarlo en cada inicio porque usa findOrCreate.
-    await runSeed();
+      // El seed crea roles, permisos y el superusuario si no existen.
+      // Es seguro ejecutarlo en cada inicio porque usa findOrCreate.
+      await runSeed();
 
-    app.listen(PORT, () => {
-      console.log(`Servidor corriendo en http://localhost:${PORT}`);
-    });
-  })
-  .catch((error) => {
-    console.error('Error al conectar con la base de datos:', error);
-    // Termina el proceso si no se puede conectar a la BD.
-    // No tiene sentido que el servidor corra sin base de datos.
-    process.exit(1);
-  });
+      app.listen(PORT, () => {
+        console.log(`Servidor corriendo en http://localhost:${PORT}`);
+      });
+
+      return;
+    } catch (error) {
+      console.error(`Error al conectar con la BD (intento ${attempt}/${retries}):`, String(error));
+      if (attempt === retries) {
+        console.error('No se pudo conectar a la base de datos. Cerrando.');
+        process.exit(1);
+      }
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
+startServer();
 
 export default app;
