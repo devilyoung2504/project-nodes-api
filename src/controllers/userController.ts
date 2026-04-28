@@ -131,9 +131,26 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const user = await User.findByPk(id);
+    const user = await User.findByPk(id, {
+      include: [{ model: Role, as: 'role', attributes: ['name'] }],
+    });
     if (!user) {
       res.status(404).json({ message: 'Usuario no encontrado' });
+      return;
+    }
+
+    const targetRoleName = (user as any).role?.name;
+    const requesterRole = req.user!.roleName;
+
+    // Admin solo puede editar usuarios con rol 'user' (no a otros admins ni al superuser)
+    if (requesterRole === 'admin' && req.user!.id !== Number(id) && targetRoleName !== 'user') {
+      res.status(403).json({ message: 'Un admin solo puede editar usuarios con rol user' });
+      return;
+    }
+
+    // Nadie puede editar al superuser excepto él mismo
+    if (targetRoleName === 'superuser' && req.user!.id !== Number(id)) {
+      res.status(403).json({ message: 'No puedes editar al superusuario' });
       return;
     }
 
