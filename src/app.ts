@@ -46,19 +46,28 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 
-// Devuelve la primera IP privada (no loopback) de la instancia.
-// Útil para identificar qué nodo responde detrás de un balanceador.
-function getPrivateIp(): string {
+// IP de la instancia resuelta al arrancar.
+// En EC2 se obtiene del servicio de metadatos (IMDS); fuera de EC2 cae al fallback.
+let instanceIp = 'unknown';
+
+async function resolveInstanceIp(): Promise<void> {
+  try {
+    // El IMDS de EC2 siempre está en esta IP, accesible desde dentro del contenedor
+    const res = await fetch('http://169.254.169.254/latest/meta-data/local-ipv4', {
+      signal: AbortSignal.timeout(1000),
+    });
+    if (res.ok) { instanceIp = (await res.text()).trim(); return; }
+  } catch { /* fuera de EC2, el fetch falla — usamos fallback */ }
+
   for (const ifaces of Object.values(os.networkInterfaces())) {
     for (const iface of ifaces ?? []) {
-      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+      if (iface.family === 'IPv4' && !iface.internal) { instanceIp = iface.address; return; }
     }
   }
-  return 'unknown';
 }
 
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'OK', ip: getPrivateIp() });
+  res.status(200).json({ status: 'OK', ip: instanceIp });
 });
 
 // ── Inicialización ────────────────────────────────────────────
@@ -75,6 +84,7 @@ async function startServer(retries = 10, delayMs = 3000): Promise<void> {
       // El seed crea roles, permisos y el superusuario si no existen.
       // Es seguro ejecutarlo en cada inicio porque usa findOrCreate.
       await runSeed();
+      await resolveInstanceIp();
 
       app.listen(PORT, () => {
         console.log(`Servidor corriendo en http://localhost:${PORT}`);
