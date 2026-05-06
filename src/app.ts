@@ -52,12 +52,21 @@ let instanceIp = 'unknown';
 
 async function resolveInstanceIp(): Promise<void> {
   try {
-    // El IMDS de EC2 siempre está en esta IP, accesible desde dentro del contenedor
-    const res = await fetch('http://169.254.169.254/latest/meta-data/local-ipv4', {
+    // IMDSv2: primero obtener un token, luego usarlo para pedir los metadatos
+    const tokenRes = await fetch('http://169.254.169.254/latest/api/token', {
+      method: 'PUT',
+      headers: { 'X-aws-ec2-metadata-token-ttl-seconds': '21600' },
       signal: AbortSignal.timeout(1000),
     });
-    if (res.ok) { instanceIp = (await res.text()).trim(); return; }
-  } catch { /* fuera de EC2, el fetch falla — usamos fallback */ }
+    if (tokenRes.ok) {
+      const token = await tokenRes.text();
+      const ipRes = await fetch('http://169.254.169.254/latest/meta-data/local-ipv4', {
+        headers: { 'X-aws-ec2-metadata-token': token },
+        signal: AbortSignal.timeout(1000),
+      });
+      if (ipRes.ok) { instanceIp = (await ipRes.text()).trim(); return; }
+    }
+  } catch { /* fuera de EC2 el fetch falla — usamos fallback */ }
 
   for (const ifaces of Object.values(os.networkInterfaces())) {
     for (const iface of ifaces ?? []) {
