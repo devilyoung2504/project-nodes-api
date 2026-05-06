@@ -9,6 +9,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import os from 'os';
 import sequelize from './config/database';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
@@ -45,10 +46,19 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 
-// Ruta de salud: sirve para verificar que el servidor está activo.
-// Útil para herramientas de monitoreo o pruebas rápidas.
+// Devuelve la primera IP privada (no loopback) de la instancia.
+// Útil para identificar qué nodo responde detrás de un balanceador.
+function getPrivateIp(): string {
+  for (const ifaces of Object.values(os.networkInterfaces())) {
+    for (const iface of ifaces ?? []) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+    }
+  }
+  return 'unknown';
+}
+
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'OK', message: 'Servidor funcionando correctamente' });
+  res.status(200).json({ status: 'OK', ip: getPrivateIp() });
 });
 
 // ── Inicialización ────────────────────────────────────────────
