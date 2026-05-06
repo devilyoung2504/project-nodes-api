@@ -76,7 +76,7 @@ async function resolveInstanceIp(): Promise<void> {
 }
 
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'OK', ip: instanceIp });
+  res.status(200).json({ status: 'OK', message: 'Servidor funcionando correctamente', ip: instanceIp });
 });
 
 // ── Inicialización ────────────────────────────────────────────
