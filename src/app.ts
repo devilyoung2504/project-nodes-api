@@ -26,7 +26,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ── Middlewares globales ──────────────────────────────────────
-const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:4200').split(',');
+const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:4200')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
 app.use(cors({
   origin: (origin, callback) => {
     // Permitir requests sin origin (ej. Postman, curl) y los origins configurados
